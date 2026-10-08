@@ -106,6 +106,16 @@
   background: var(--hover);
 }
 
+.server-picker-static {
+  composes: server-picker-button;
+  cursor: default;
+}
+
+.server-picker-static:hover {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
 .server-picker-text {
   display: flex;
   flex: 1;

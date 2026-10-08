@@ -959,16 +959,28 @@ function ServerPicker(props: {
     return null;
   }
 
+  const status = (
+    <span className={styles.serverPickerText}>
+      <span className={styles.serverPickerLine}>
+        <StateDot tone={props.connected ? "good" : undefined} className={styles.serverDot} />
+        <span className={styles.serverName}>{serverDisplayName(active)}</span>
+      </span>
+      {props.started && <ServerUptime />}
+    </span>
+  );
+
+  if (servers.length === 1) {
+    return (
+      <div className={styles.serverPicker}>
+        <div className={styles.serverPickerStatic}>{status}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.serverPicker} ref={ref}>
       <button type="button" className={styles.serverPickerButton} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className={styles.serverPickerText}>
-          <span className={styles.serverPickerLine}>
-            <StateDot tone={props.connected ? "good" : undefined} className={styles.serverDot} />
-            <span className={styles.serverName}>{serverDisplayName(active)}</span>
-          </span>
-          {props.started && <ServerUptime />}
-        </span>
+        {status}
         <Icon name="unfold_more" size={13} />
       </button>
       {open && (

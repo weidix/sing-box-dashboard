@@ -1,19 +1,12 @@
 import { useState } from "react";
 
-import type { Server, ServersState } from "../api/config";
-import { serverDisplayName } from "../api/config";
 import type { DaemonConnectionState, DesktopHost } from "../app/desktop";
 import { useI18n } from "../app/i18n";
 import { Icon } from "../components/Icon";
 import { Brand, Button, Dialog, Spinner } from "../components/ui";
 import styles from "./ConnectionErrorView.module.css";
 
-export function DesktopSetupView(props: {
-  host: DesktopHost;
-  state: DaemonConnectionState;
-  serversState: ServersState;
-  onSelectServer: (server: Server) => void;
-}) {
+export function DesktopSetupView(props: { host: DesktopHost; state: DaemonConnectionState }) {
   const { t } = useI18n();
   const host = props.host;
   const state = props.state;
@@ -137,26 +130,6 @@ export function DesktopSetupView(props: {
                   {connecting ? t("Connecting...") : t("Retry")}
                 </Button>
               )}
-            </div>
-          )}
-          {props.serversState.servers.length > 0 && (
-            <div className={styles.connectionErrorSwitch}>
-              <div className={styles.connectionErrorSwitchTitle}>{t("Connect to a remote server")}</div>
-              {props.serversState.servers.map((server) => (
-                <button
-                  type="button"
-                  key={server.id}
-                  className={styles.connectionErrorSwitchItem}
-                  onClick={() => props.onSelectServer(server)}
-                >
-                  <Icon name="dns" size={14} />
-                  <span className="server-row-name">{serverDisplayName(server)}</span>
-                  <span className="server-row-url">{server.url}</span>
-                  <span className="settings-row-chevron">
-                    <Icon name="keyboard_arrow_right" size={14} />
-                  </span>
-                </button>
-              ))}
             </div>
           )}
         </div>

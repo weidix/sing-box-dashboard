@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package manager.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/weidix/singbox-manager/gen/manager/v1;managerv1";
+
+service ManagerService {
+  rpc ListBackends(google.protobuf.Empty) returns (BackendList) {}
+  rpc SubscribeBackends(google.protobuf.Empty) returns (stream BackendList) {}
+  rpc SelectBackend(SelectBackendRequest) returns (google.protobuf.Empty) {}
+  rpc GetState(BackendRequest) returns (BackendState) {}
+  rpc SetState(SetStateRequest) returns (google.protobuf.Empty) {}
+}
+
+message BackendList {
+  repeated Backend backends = 1;
+  string selectedBackendId = 2;
+}
+
+message Backend {
+  string id = 1;
+  string name = 2;
+}
+
+message SelectBackendRequest {
+  string backendId = 1;
+}
+
+message BackendRequest {
+  string backendId = 1;
+}
+
+message BackendState {
+  string backendId = 1;
+  string json = 2;
+}
+
+message SetStateRequest {
+  string backendId = 1;
+  string json = 2;
+}

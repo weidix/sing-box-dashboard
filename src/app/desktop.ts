@@ -1,12 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import type { Transport } from "@connectrpc/connect";
 
-import type { StreamSnapshot } from "../api/stream";
 import type { NetworkQualityTestProgress, STUNTestProgress } from "../gen/daemon/started_service_pb";
 import type { PreferenceStorage } from "../lib/storage";
 import { showError } from "./errorStore";
-import { useLatestRef } from "./useLatest";
 
 export type DaemonConnectionPhase =
   | "connecting"
@@ -39,18 +37,6 @@ export interface DesktopProfile {
 export interface DesktopProfilesState {
   selectedId: string | null;
   profiles: DesktopProfile[];
-}
-
-export interface DesktopServer {
-  id: string;
-  name: string;
-  url: string;
-  secret: string;
-}
-
-export interface DesktopServersState {
-  servers: DesktopServer[];
-  activeId: string | null;
 }
 
 export interface DesktopProfileCreate {
@@ -239,10 +225,6 @@ export interface DesktopHost {
     stop(): Promise<void>;
     takeOver(): Promise<void>;
   };
-  servers: {
-    load(): Promise<DesktopServersState>;
-    save(state: DesktopServersState): Promise<void>;
-  };
   configuration: {
     check(content: string): Promise<void>;
     format(content: string): Promise<string>;
@@ -405,29 +387,6 @@ export function useDaemonConnection(host: DesktopHost): DaemonConnectionState {
   }, [host]);
 
   return state;
-}
-
-export interface RemoteSessionFailure {
-  hadConnected: boolean;
-  message: string;
-}
-
-export function useRemoteSession(
-  monitor: StreamSnapshot<unknown> | null,
-  onEnd: (failure: RemoteSessionFailure) => void,
-) {
-  const onEndRef = useLatestRef(onEnd);
-  const hadConnected = useRef(false);
-  const phase = monitor?.phase ?? null;
-  const errorMessage = monitor?.error;
-
-  useEffect(() => {
-    if (phase === "active") {
-      hadConnected.current = true;
-    } else if (phase === "error") {
-      onEndRef.current({ hadConnected: hadConnected.current, message: errorMessage ?? "" });
-    }
-  }, [onEndRef, phase, errorMessage]);
 }
 
 export function useDesktopProfiles(host: DesktopHost): DesktopProfilesState {

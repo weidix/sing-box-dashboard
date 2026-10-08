@@ -1,8 +1,6 @@
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 
-import { serverConnectUrl, type Server } from "./config";
-
 // Bidirectional gRPC streaming over the improbable-eng/grpc-web
 // "grpc-websockets" subprotocol the sing-box API service accepts.
 
@@ -12,7 +10,6 @@ export interface GrpcStatus {
 }
 
 export interface WebSocketStreamOptions<Req extends DescMessage, Res extends DescMessage> {
-  config: Server;
   language: string;
   service: string;
   method: string;
@@ -32,7 +29,7 @@ export class GrpcWebSocketStream<Req extends DescMessage, Res extends DescMessag
   private status: GrpcStatus | null = null;
 
   constructor(private options: WebSocketStreamOptions<Req, Res>) {
-    const baseUrl = serverConnectUrl(options.config.url).replace(/^http/, "ws");
+    const baseUrl = location.origin.replace(/^http/, "ws");
     let socket: WebSocket;
     try {
       socket = new WebSocket(`${baseUrl}/${options.service}/${options.method}`, [
@@ -45,10 +42,7 @@ export class GrpcWebSocketStream<Req extends DescMessage, Res extends DescMessag
     this.socket = socket;
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
-      let headers = `content-type: application/grpc-web+proto\r\nx-grpc-web: 1\r\naccept-language: ${options.language}\r\n`;
-      if (options.config.secret) {
-        headers += `authorization: Bearer ${options.config.secret}\r\n`;
-      }
+      const headers = `content-type: application/grpc-web+proto\r\nx-grpc-web: 1\r\naccept-language: ${options.language}\r\n`;
       socket.send(new TextEncoder().encode(headers));
       this.opened = true;
       for (const pending of this.pendingSends) {

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { serverDisplayName, type ServersState } from "../api/config";
 import { formatUptime } from "../api/format";
 import { useStream } from "../api/stream";
 import { useApi, useNow } from "../app/context";
@@ -12,7 +11,7 @@ import { useUnaryOnce } from "../app/hooks";
 import { useI18n } from "../app/i18n";
 import { ServiceStatus_Type } from "../gen/daemon/started_service_pb";
 import { Icon } from "./Icon";
-import { IconButton, Select, Spinner } from "./ui";
+import { IconButton, Spinner } from "./ui";
 import styles from "./DesktopToolbar.module.css";
 import { cx } from "../lib/cx";
 
@@ -36,33 +35,6 @@ export function DesktopToolbar(props: {
       </div>
       <div className={cx(styles.toolbarSection, styles.toolbarEnd)} ref={props.endRef} />
     </header>
-  );
-}
-
-export function DesktopServerPicker(props: {
-  serversState: ServersState;
-  localServerId: string;
-  activeId: string;
-  onSelect: (id: string) => void;
-}) {
-  const { t } = useI18n();
-  if (props.serversState.servers.length === 0) {
-    return null;
-  }
-  return (
-    <span className={styles.toolbarServer}>
-      <Select
-        options={[
-          { value: props.localServerId, label: t("This Computer") },
-          ...props.serversState.servers.map((server) => ({
-            value: server.id,
-            label: serverDisplayName(server),
-          })),
-        ]}
-        value={props.activeId}
-        onChange={props.onSelect}
-      />
-    </span>
   );
 }
 
@@ -114,26 +86,6 @@ export function DesktopServiceControls(props: { host: DesktopHost }) {
           <Icon name="play_arrow" />
         </IconButton>
       )}
-    </div>
-  );
-}
-
-export function DesktopRemoteControls(props: { onDisconnect: () => void }) {
-  const api = useApi();
-  const { t } = useI18n();
-  const serviceStatus = useStream(api.serviceStatus);
-  const started = serviceStatus.data.status?.status === ServiceStatus_Type.STARTED;
-
-  return (
-    <div className={styles.toolbarService}>
-      <IconButton
-        className={started ? styles.toolbarServiceButton : undefined}
-        title={t("Disconnect")}
-        onClick={props.onDisconnect}
-      >
-        {started && <ToolbarUptime />}
-        <Icon name="cloud_off" />
-      </IconButton>
     </div>
   );
 }

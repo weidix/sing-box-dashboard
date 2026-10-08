@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
 import { DaemonApi } from "./api/daemon";
-import type { Server } from "./api/config";
 import { urlTestDelayTone } from "./api/format";
 import { useStream } from "./api/stream";
 import {
@@ -23,8 +22,6 @@ import type { Group } from "./gen/daemon/started_service_pb";
 import { cx } from "./lib/cx";
 import { watchStoredValues } from "./lib/storage";
 import styles from "./TrayMenu.module.css";
-
-const TRAY_LOCAL_SERVER: Server = { id: "tray-local", name: "sing-box", url: "", secret: "" };
 
 const HOVER_CLOSE_DELAY = 180;
 
@@ -160,7 +157,7 @@ function TrayMenuContent(props: { host: DesktopHost }) {
   const controller = useSubmenuController();
   useMenuKeyboard(controller, closeMenu);
   const api = useMemo(
-    () => new DaemonApi(TRAY_LOCAL_SERVER, language, host.transport),
+    () => new DaemonApi(language, host.transport),
     [host, language],
   );
   const connection = useDaemonConnection(host);

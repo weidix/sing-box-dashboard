@@ -8,7 +8,6 @@ import { ConnectError } from "@connectrpc/connect";
 import type { Transport } from "@connectrpc/connect";
 import { createWritableIterable } from "@connectrpc/connect/protocol";
 
-import type { Server } from "./config";
 import { GrpcWebSocketStream, type GrpcStatus } from "./websocket";
 
 export type { GrpcStatus };
@@ -24,7 +23,6 @@ export interface BidirectionalStreamHandlers<O extends DescMessage> {
 }
 
 export function openBidirectionalStream<I extends DescMessage, O extends DescMessage>(
-  config: Server,
   language: string,
   method: DescMethodBiDiStreaming<I, O>,
   handlers: BidirectionalStreamHandlers<O>,
@@ -34,7 +32,6 @@ export function openBidirectionalStream<I extends DescMessage, O extends DescMes
     return new TransportBidirectionalStream(transport, method, handlers);
   }
   return new GrpcWebSocketStream({
-    config,
     language,
     service: method.parent.typeName,
     method: method.name,

@@ -3,6 +3,7 @@ inputs:
   - directory: proto
     paths:
       - proto/daemon/started_service.proto
+      - proto/manager/v1/manager.proto
 plugins:
   - local: protoc-gen-es
     out: src/gen

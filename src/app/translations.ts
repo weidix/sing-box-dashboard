@@ -76,6 +76,12 @@ export const TRANSLATIONS = {
     "fa": "این یک سرویس API مربوط به sing-box نیست، یا مسیر نادرست است.",
     "ru": "Это не API-сервис sing-box или указан неверный путь.",
   },
+  "The sing-box manager is unreachable; check that it is running and that this page is served by it.": {
+    "zh-Hans": "无法连接 singbox-manager；请确认它正在运行，且本页面由它托管。",
+    "zh-Hant": "無法連接 singbox-manager；請確認它正在執行，且本頁面由它託管。",
+    "fa": "مدیر sing-box در دسترس نیست؛ بررسی کنید که در حال اجرا باشد و این صفحه توسط آن ارائه شود.",
+    "ru": "Менеджер sing-box недоступен; проверьте, что он запущен и что эта страница отдаётся им.",
+  },
 
   "Servers": { "zh-Hans": "服务器", "zh-Hant": "伺服器", "fa": "سرورها", "ru": "Серверы" },
   "No servers": { "zh-Hans": "无服务器", "zh-Hant": "無伺服器", "fa": "بدون سرور", "ru": "Нет серверов" },

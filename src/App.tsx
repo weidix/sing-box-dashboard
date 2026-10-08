@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import {
-  loadServersState,
-  saveServersState,
-  serverDisplayName,
-  type Server,
-  type ServersState,
-} from "./api/config";
+import { serverDisplayName, type Server, type ServersState } from "./api/config";
 import { DaemonApi } from "./api/daemon";
 import { formatDateTime, formatUptime, isHttpUrl } from "./api/format";
 import { isTerminalCode, useStream, type StreamStore } from "./api/stream";
@@ -33,16 +27,14 @@ import {
   useDaemonConnection,
   useDesktopHost,
   useLocalDesktopHost,
-  useRemoteSession,
   type DesktopHost,
 } from "./app/desktop";
 import { loadDisableDeprecatedWarnings } from "./app/deprecatedWarnings";
 import { dismissError, showError, useCurrentError } from "./app/errorStore";
 import { useDismiss, useStreamOutage, useUnaryOnce } from "./app/hooks";
 import { I18nProvider, useI18n, type Translate } from "./app/i18n";
+import { useBackends } from "./app/backends";
 import {
-  DesktopRemoteControls,
-  DesktopServerPicker,
   DesktopServiceControls,
   DesktopToolbar,
 } from "./components/DesktopToolbar";
@@ -50,7 +42,6 @@ import { Icon, type IconName } from "./components/Icon";
 import { ToolbarSlotsProvider } from "./components/PageHeader";
 import { Brand, Button, Dialog, IconButton, Spinner, StateDot } from "./components/ui";
 import { SSH_DEFAULT_TERMINAL_TYPE, SSH_DEFAULT_USERNAME } from "./lib/tailscaleSSH";
-import { loadStoredString, saveStoredString } from "./lib/storage";
 import { ConnectionErrorView } from "./views/ConnectionErrorView";
 import { ConnectionsView } from "./views/ConnectionsView";
 import { DesktopSetupView } from "./views/DesktopSetupView";
@@ -89,13 +80,11 @@ import {
   AppSettingsView,
   CoreView,
   PreferencesView,
-  ServersView,
   SettingsView,
   TerminalConfigurationView,
   TerminalThemeEditorView,
   TerminalThemePickerView,
 } from "./views/SettingsView";
-import { SetupView } from "./views/SetupView";
 import { UpdatesGate } from "./views/UpdateViews";
 import { NetworkQualityView, STUNTestView, ToolsView } from "./views/ToolsView";
 import { TaildropNavBadge, TaildropSendRequestDialog, TaildropView } from "./views/TaildropView";
@@ -137,7 +126,6 @@ export type Route =
   | { page: "settings/preferences/terminal" }
   | { page: "settings/preferences/terminal/theme"; scheme: "light" | "dark" }
   | { page: "settings/preferences/terminal/custom"; scheme: "light" | "dark" }
-  | { page: "settings/servers" }
   | { page: "profile-editor"; profileId: string; readOnly: boolean };
 
 function routeFromHash(locationHash: string): Route {
@@ -263,8 +251,6 @@ function routeFromHash(locationHash: string): Route {
             return { page: "settings/preferences/terminal" };
           }
           return { page: "settings/preferences" };
-        case "servers":
-          return { page: "settings/servers" };
         default:
           return { page: "settings" };
       }
@@ -362,8 +348,6 @@ function routeTitle(route: Route, t: Translate, language: string): string {
       return route.scheme === "dark" ? t("Dark") : t("Light");
     case "settings/preferences/terminal/custom":
       return t("Custom theme");
-    case "settings/servers":
-      return t("Remote Control");
     case "profile-editor":
       return route.readOnly ? t("View Content") : t("Edit Content");
   }
@@ -380,8 +364,7 @@ function EndpointToolbarTitle<T>(props: {
   return props.count(status.data) > 1 && props.tag !== "" ? props.taggedTitle : props.title;
 }
 
-const DESKTOP_LOCAL_SERVER: Server = { id: "local", name: "sing-box", url: "", secret: "" };
-const DESKTOP_ACTIVE_KEY = "desktop-active-server";
+const DESKTOP_LOCAL_SERVER: Server = { id: "local", name: "sing-box" };
 
 export function App(props: { desktop?: DesktopHost } = {}) {
   const desktop = props.desktop ?? null;
@@ -395,19 +378,9 @@ export function App(props: { desktop?: DesktopHost } = {}) {
   );
 }
 
-function useAppState(desktop: DesktopHost | null = null) {
-  const [serversState, setServersState] = useState<ServersState>(() =>
-    desktop === null ? loadServersState() : { servers: [], activeId: null },
-  );
+function usePreferences() {
   const [theme, setTheme] = useState<ThemePreference>(() => loadThemePreference());
   const [accent, setAccent] = useState<AccentPreference>(() => loadAccentPreference());
-  const locationHash = useSyncExternalStore(
-    subscribeLocationHash,
-    locationHashSnapshot,
-    locationHashSnapshot,
-  );
-  const route = useMemo(() => routeFromHash(locationHash), [locationHash]);
-  const serversReady = useRef(desktop === null);
 
   useEffect(() => {
     applyTheme(theme);
@@ -419,39 +392,6 @@ function useAppState(desktop: DesktopHost | null = null) {
 
   useEffect(() => watchSystemTheme(() => loadThemePreference()), []);
 
-  useEffect(() => {
-    if (desktop === null) {
-      return;
-    }
-    serversReady.current = false;
-    let stale = false;
-    void desktop.servers
-      .load()
-      .then((storedState) => {
-        if (!stale) {
-          serversReady.current = true;
-          setServersState(() => storedState);
-        }
-      })
-      .catch(showError);
-    return () => {
-      stale = true;
-    };
-  }, [desktop]);
-
-  const updateServers = (next: ServersState) => {
-    if (desktop === null) {
-      saveServersState(next);
-    } else {
-      if (!serversReady.current) {
-        showError(new Error("Server storage is not available"));
-        return;
-      }
-      void desktop.servers.save(next).catch(showError);
-    }
-    setServersState(() => next);
-  };
-
   const updateTheme = (next: ThemePreference) => {
     saveThemePreference(next);
     setTheme(() => next);
@@ -462,14 +402,28 @@ function useAppState(desktop: DesktopHost | null = null) {
     setAccent(() => next);
   };
 
-  return { serversState, updateServers, theme, updateTheme, accent, updateAccent, route };
+  return { theme, updateTheme, accent, updateAccent };
+}
+
+function useRoute(): Route {
+  const locationHash = useSyncExternalStore(
+    subscribeLocationHash,
+    locationHashSnapshot,
+    locationHashSnapshot,
+  );
+  return useMemo(() => routeFromHash(locationHash), [locationHash]);
 }
 
 function WebApp() {
-  const state = useAppState();
+  const preferences = usePreferences();
+  const route = useRoute();
+  const { state, select, retry } = useBackends();
 
-  const activeServer =
-    state.serversState.servers.find((server) => server.id === state.serversState.activeId) ?? null;
+  const servers: Server[] = state.backends.map((backend) => ({
+    id: backend.id,
+    name: backend.name,
+  }));
+  const activeServer = servers.find((server) => server.id === state.selectedId) ?? null;
 
   useEffect(() => {
     if (!activeServer && location.hash !== "") {
@@ -477,20 +431,21 @@ function WebApp() {
     }
   }, [activeServer]);
 
-  if (!activeServer) {
+  if (state.phase === "loading") {
     return (
-      <SetupView
-        onCreate={(server) => {
-          state.updateServers({
-            servers: [...state.serversState.servers, server],
-            activeId: server.id,
-          });
-          navigate("overview");
-        }}
-        theme={state.theme}
-        onThemeChange={state.updateTheme}
-        accent={state.accent}
-        onAccentChange={state.updateAccent}
+      <div className={styles.connectingView}>
+        <Brand className={styles.connectingBrand} />
+        <Spinner className={styles.connectingSpinner} />
+      </div>
+    );
+  }
+
+  if (state.phase === "error" || activeServer === null) {
+    return (
+      <ConnectionErrorView
+        error={state.error ?? "singbox-manager has no backend configured"}
+        reconnecting={false}
+        onRetry={retry}
       />
     );
   }
@@ -499,20 +454,21 @@ function WebApp() {
     <Shell
       key={activeServer.id}
       server={activeServer}
-      serversState={state.serversState}
-      onServersChange={state.updateServers}
-      route={state.route}
-      theme={state.theme}
-      onThemeChange={state.updateTheme}
-      accent={state.accent}
-      onAccentChange={state.updateAccent}
+      serversState={{ servers, activeId: activeServer.id }}
+      onSelectBackend={select}
+      route={route}
+      theme={preferences.theme}
+      onThemeChange={preferences.updateTheme}
+      accent={preferences.accent}
+      onAccentChange={preferences.updateAccent}
     />
   );
 }
 
 function DesktopApp(props: { host: DesktopHost }) {
   const host = props.host;
-  const state = useAppState(host);
+  const preferences = usePreferences();
+  const route = useRoute();
   const connection = useDaemonConnection(host);
   const connectionResolvedOnce = useRef(false);
   const connectionHasResolved =
@@ -522,51 +478,22 @@ function DesktopApp(props: { host: DesktopHost }) {
       connectionResolvedOnce.current = true;
     }
   }, [connection.phase]);
-  const [activeId, setActiveId] = useState<string>(
-    () => loadStoredString(DESKTOP_ACTIVE_KEY) ?? DESKTOP_LOCAL_SERVER.id,
-  );
 
   useEffect(() => {
     document.body.dataset.platform = host.platform;
   }, [host]);
 
-  const selectServer = (id: string) => {
-    saveStoredString(DESKTOP_ACTIVE_KEY, id);
-    setActiveId(() => id);
-  };
-
-  const servers = state.serversState.servers;
-  useEffect(() => {
-    if (activeId !== DESKTOP_LOCAL_SERVER.id && !servers.some((server) => server.id === activeId)) {
-      saveStoredString(DESKTOP_ACTIVE_KEY, DESKTOP_LOCAL_SERVER.id);
-      setActiveId(DESKTOP_LOCAL_SERVER.id);
-    }
-  }, [activeId, servers]);
-
-  const activeServer =
-    state.serversState.servers.find((server) => server.id === activeId) ?? DESKTOP_LOCAL_SERVER;
-  const local = activeServer.id === DESKTOP_LOCAL_SERVER.id;
-
-  const picker = (
-    <DesktopServerPicker
-      serversState={state.serversState}
-      localServerId={DESKTOP_LOCAL_SERVER.id}
-      activeId={activeServer.id}
-      onSelect={selectServer}
-    />
-  );
-
-  if (state.route.page === "profile-editor") {
+  if (route.page === "profile-editor") {
     return (
       <ProfileContentWindow
         host={host}
-        profileId={state.route.profileId}
-        readOnly={state.route.readOnly}
+        profileId={route.profileId}
+        readOnly={route.readOnly}
       />
     );
   }
 
-  if (local && connection.phase !== "connected") {
+  if (connection.phase !== "connected") {
     if (!connectionHasResolved) {
       return (
         <div className={styles.desktopRoot}>
@@ -578,13 +505,8 @@ function DesktopApp(props: { host: DesktopHost }) {
     }
     return (
       <div className={styles.desktopRoot}>
-        <DesktopToolbar window picker={picker} />
-        <DesktopSetupView
-          host={host}
-          state={connection}
-          serversState={state.serversState}
-          onSelectServer={(server) => selectServer(server.id)}
-        />
+        <DesktopToolbar window />
+        <DesktopSetupView host={host} state={connection} />
         <UpdatesGate host={host} />
       </div>
     );
@@ -593,27 +515,14 @@ function DesktopApp(props: { host: DesktopHost }) {
   return (
     <div className={styles.desktopRoot}>
       <Shell
-        key={activeServer.id}
-        server={activeServer}
-        desktopLocal={local}
-        desktopPicker={picker}
-        onExitRemote={
-          local
-            ? undefined
-            : (alert) => {
-                selectServer(DESKTOP_LOCAL_SERVER.id);
-                if (alert !== undefined) {
-                  showError(alert);
-                }
-              }
-        }
-        serversState={state.serversState}
-        onServersChange={state.updateServers}
-        route={state.route}
-        theme={state.theme}
-        onThemeChange={state.updateTheme}
-        accent={state.accent}
-        onAccentChange={state.updateAccent}
+        key={DESKTOP_LOCAL_SERVER.id}
+        server={DESKTOP_LOCAL_SERVER}
+        desktopLocal
+        route={route}
+        theme={preferences.theme}
+        onThemeChange={preferences.updateTheme}
+        accent={preferences.accent}
+        onAccentChange={preferences.updateAccent}
       />
       <UpdatesGate host={host} />
     </div>
@@ -649,10 +558,8 @@ function GlobalErrorDialog() {
 interface ShellProps {
   server: Server;
   desktopLocal?: boolean;
-  desktopPicker?: React.ReactNode;
-  onExitRemote?: (alert?: string) => void;
-  serversState: ServersState;
-  onServersChange: (state: ServersState) => void;
+  serversState?: ServersState;
+  onSelectBackend?: (id: string) => void;
   route: Route;
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
@@ -667,10 +574,10 @@ function Shell(props: ShellProps) {
   const api = useMemo(
     () =>
       host !== null && props.desktopLocal === true
-        ? new DaemonApi(props.server, language, host.transport)
-        : new DaemonApi(props.server, language),
+        ? new DaemonApi(language, host.transport)
+        : new DaemonApi(language),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.server, host, props.desktopLocal, language, generation],
+    [host, props.desktopLocal, language, generation],
   );
   return (
     <DesktopLocalContext.Provider value={host !== null && props.desktopLocal === true}>
@@ -713,21 +620,6 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
   const lostError = useStreamOutage(
     serviceStatus,
     isTerminalCode(serviceStatus.errorCode) || serviceStatus.data.status === null,
-  );
-
-  const onExitRemote = props.onExitRemote;
-  useRemoteSession(
-    host !== null && props.desktopLocal !== true ? serviceStatus : null,
-    (failure) => {
-      onExitRemote?.(
-        t(
-          failure.hadConnected
-            ? "Disconnected from remote server {name}"
-            : "Failed to connect to remote server {name}",
-          { name: serverDisplayName(props.server) },
-        ) + (failure.message !== "" ? `\n${failure.message}` : ""),
-      );
-    },
   );
 
   useEffect(() => {
@@ -790,12 +682,9 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
   if (lostError !== null && host === null) {
     return (
       <ConnectionErrorView
-        server={props.server}
         error={lostError}
         reconnecting={serviceStatus.phase === "connecting"}
         onRetry={props.onRetry}
-        serversState={props.serversState}
-        onServersChange={props.onServersChange}
       />
     );
   }
@@ -924,9 +813,6 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
       {route.page === "settings/preferences/terminal/custom" && (
         <TerminalThemeEditorView scheme={route.scheme} />
       )}
-      {route.page === "settings/servers" && (
-        <ServersView serversState={props.serversState} onServersChange={props.onServersChange} />
-      )}
     </main>
   );
 
@@ -981,12 +867,14 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
             {hasGroups && navItem("groups", t("Groups"), "folder", route.page === "groups")}
             {started && navItem("connections", t("Connections"), "swap_vert", route.page === "connections")}
             {mainPages}
-            <ServerPicker
-              serversState={props.serversState}
-              onServersChange={props.onServersChange}
-              connected={reachable}
-              started={started}
-            />
+            {props.serversState !== undefined && props.onSelectBackend !== undefined && (
+              <ServerPicker
+                serversState={props.serversState}
+                onSelect={props.onSelectBackend}
+                connected={reachable}
+                started={started}
+              />
+            )}
           </nav>
         )}
         {host !== null ? (
@@ -1029,14 +917,7 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
                   routeTitle(route, t, language)
                 )
               }
-              picker={props.desktopPicker}
-              controls={
-                props.desktopLocal === true ? (
-                  <DesktopServiceControls host={host} />
-                ) : onExitRemote !== undefined ? (
-                  <DesktopRemoteControls onDisconnect={() => onExitRemote()} />
-                ) : undefined
-              }
+              picker={props.desktopLocal === true ? <DesktopServiceControls host={host} /> : undefined}
               leadRef={setLeadSlot}
               endRef={setEndSlot}
             />
@@ -1064,11 +945,10 @@ function ShellContent(props: ShellProps & { onRetry: () => void }) {
 
 function ServerPicker(props: {
   serversState: ServersState;
-  onServersChange: (state: ServersState) => void;
+  onSelect: (id: string) => void;
   connected: boolean;
   started: boolean;
 }) {
-  const { t } = useI18n();
   const { servers, activeId } = props.serversState;
   const active = servers.find((server) => server.id === activeId);
   const [open, setOpen] = useState(false);
@@ -1101,7 +981,7 @@ function ServerPicker(props: {
               onClick={() => {
                 setOpen(false);
                 if (server.id !== activeId) {
-                  props.onServersChange({ ...props.serversState, activeId: server.id });
+                  props.onSelect(server.id);
                 }
               }}
             >
@@ -1109,20 +989,6 @@ function ServerPicker(props: {
               {serverDisplayName(server)}
             </button>
           ))}
-          <div className="menu-divider" />
-          <button
-            type="button"
-            className="menu-item"
-            onClick={() => {
-              setOpen(false);
-              navigate("settings/servers");
-            }}
-          >
-            <span className="menu-check">
-              <Icon name="settings" size={13} />
-            </span>
-            {t("Manage servers...")}
-          </button>
         </div>
       )}
     </div>

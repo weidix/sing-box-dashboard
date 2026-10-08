@@ -25,7 +25,6 @@ import {
   type BidirectionalStream,
   type BidirectionalStreamHandlers,
 } from "./bidirectional";
-import { serverConnectUrl, type Server } from "./config";
 import { StreamStore } from "./stream";
 
 export const STATUS_HISTORY_LENGTH = 30;
@@ -111,7 +110,6 @@ export interface ServerInfo {
 const SUBSCRIPTION_INTERVAL = 1_000_000_000n;
 
 export class DaemonApi {
-  readonly config: Server;
   readonly client: Client<typeof StartedService>;
   private readonly bidirectionalTransport: Transport | undefined;
   private readonly language: string;
@@ -131,21 +129,17 @@ export class DaemonApi {
   private logSequence = 0;
   private versionCache: ServerInfo | null = null;
 
-  constructor(config: Server, language: string, transport?: Transport) {
-    this.config = config;
+  constructor(language: string, transport?: Transport) {
     this.language = language;
     this.bidirectionalTransport = transport ? withLanguageHeader(transport, language) : undefined;
     this.client = createClient(
       StartedService,
       this.bidirectionalTransport ??
         createGrpcWebTransport({
-          baseUrl: serverConnectUrl(config.url),
+          baseUrl: "",
           interceptors: [
             (next) => (request) => {
               request.header.set("Accept-Language", language);
-              if (config.secret) {
-                request.header.set("Authorization", `Bearer ${config.secret}`);
-              }
               return next(request);
             },
           ],
@@ -383,7 +377,6 @@ export class DaemonApi {
     handlers: BidirectionalStreamHandlers<O>,
   ): BidirectionalStream<I> {
     return openBidirectionalStream(
-      this.config,
       this.language,
       method,
       handlers,
